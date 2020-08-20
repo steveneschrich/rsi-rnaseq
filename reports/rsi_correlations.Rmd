@@ -1,0 +1,193 @@
+---
+title: "Project X: Data Analysis"
+shorttitle: "Short Project"
+project: "Project"
+srpt_number: 007
+version: "`r CosmosReportTemplates::git_tag()`"
+author: ''
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+investigators:
+  - name: ""
+  - name: ""
+project_team:
+analysis_team:
+analysis_contact:
+organization: "Analysis Group"
+output:
+  word_document: default
+  CosmosReportTemplates::bbsr_article_pdf: default
+  pdf_document: default
+  html_document: default
+toc: yes
+---
+
+
+# Overview
+
+The goal of this analysis is to examine the correlation of individual probesets to the RSI score, across several large datasets. We will use three different datasets: TCC (HuRSTA array), EXPO (U133 arrays) and CCLE (U133 arrays).
+
+```{r setup}
+suppressPackageStartupMessages({
+  library(readxl)
+  library(knitr)
+  library(kableExtra)
+  library(ggplot2)
+  library(dplyr)
+  library(Biobase)
+})
+```
+
+# Load Data
+Load the three different datasets.
+```{r load_data}
+ccle<-readRDS(file="../data.raw/ccle_cel.rds")
+expo<-readRDS(file="../data.raw/expo_rma_exprs.rds")
+tcc<-readRDS(file="../data.raw/tcc.primary.rds")
+
+translation<-read_excel("../data.raw/Translation.xlsx")
+```
+
+# Run correlations
+```{r}
+
+ccle_correlations<-apply(exprs(ccle), 1, function(y){cor(y, ccle$RSI)})
+expo_correlations<-apply(exprs(expo), 1, function(y){cor(y, expo$rsi)})
+tcc_correlations<-apply(exprs(tcc), 1, function(y){cor(y, tcc$RSI)})
+```
+
+# Analysis of correlations
+
+This shows that most genes are not correlated to RSI.
+```{r}
+hist(ccle_correlations, main="CCLE")
+hist(expo_correlations, main="EXPO")
+hist(tcc_correlations, main="TCC")
+```
+
+What probesets are correlated at a modest ```R=0.5```?
+```{r}
+kable(tcc_correlations[which(abs(tcc_correlations)>0.5)], col.names=c("R"), caption="TCC Correlated probesets", booktabs=TRUE)
+
+
+kable(expo_correlations[which(abs(expo_correlations)>0.5)], col.names=c("R"), caption="EXPO correlated probesets", booktabs=TRUE)
+
+kable(ccle_correlations[which(abs(ccle_correlations)>0.5)], col.names=c("R"), caption="CCLE correlated probesets", booktabs=TRUE)
+
+```
+
+
+```{r}
+	u133_coeffs<-c("AFFX-HUMISGF3A/M97935_MA_at"=0.0254552046046931,
+			"201209_at" = -0.020446868981449,
+			"201466_s_at" = 0.0128282697929755,
+			"201783_s_at" = -0.00381713588908642,
+			"202123_s_at" = 0.107021274358643,
+			"202531_at" = -0.0441682719957224,
+			"205962_at" = -0.00924314364533049,
+			"207957_s_at" = -0.00175888592095915,
+			"208762_at" = -0.00025093287356907,
+			"211110_s_at" = -0.00980092741843779)
+
+  hursta_coeffs<-c("merck-NM_139266_at"=0.0254552046046931,
+			"merck-NM_004964_at" = -0.020446868981449,
+			"merck-NM_002228_at" = 0.0128282697929755,
+			"merck2-BC069248_at" = -0.00381713588908642,
+			"merck-NM_007313_s_at" = 0.107021274358643,
+			"merck-NM_002198_at" = -0.0441682719957224,
+			"merck-BQ646444_a_at" = -0.00924314364533049,
+			"merck2-X06318_at" = -0.00175888592095915,
+			"merck-NM_001005782_s_at" = -0.00025093287356907,
+			"merck-NM_000044_a_at" = -0.00980092741843779)
+```
+
+
+# Gene Correlations
+Show the correlations of the ten genes.
+
+## TCC
+```{r}
+for (g in names(hursta_coeffs)) {
+  myplot<-ggplot(data.frame(gene=exprs(tcc)[g,], RSI=tcc$RSI, tissue=tcc$SOO_Conformed), aes(x=gene, y=RSI, color=tissue)) +
+    geom_point() +
+    theme_bw() +
+    ggtitle(g)
+  
+  print(myplot)
+}
+```
+
+## CCLE
+```{r}
+for (g in names(u133_coeffs)) {
+  myplot<-ggplot(data.frame(gene=exprs(ccle)[g,], RSI=ccle$RSI, tissue=ccle$`Site Primary`), aes(x=gene, y=RSI, color=tissue)) +
+    geom_point() +
+    theme_bw() +
+    ggtitle(g)
+  
+  print(myplot)
+}
+```
+
+## EXPO
+```{r}
+for (g in names(u133_coeffs)) {
+  myplot<-ggplot(data.frame(gene=exprs(expo)[g,], RSI=expo$rsi, tissue=expo$source_name_ch1), aes(x=gene, y=RSI)) +
+    geom_point() +
+    theme_bw() +
+    ggtitle(g)
+  
+  print(myplot)
+}
+```
+
+# ABL-IRF1
+
+# TCC
+```{r}
+ABL1<-translation %>% filter(`Gene Symbol`=="ABL1") %>% pull("HuRSTA Array")
+IRF1<-translation %>% filter(`Gene Symbol`=="IRF1") %>% pull("HuRSTA Array")
+
+ratio<-exprs(tcc)[ABL1,]-exprs(tcc)[IRF1,]
+
+ggplot(data.frame(ratio=ratio, rsi=tcc$RSI, tissue=tcc$SOO_Conformed), aes(x=ratio, y=rsi, col=tissue)) +
+  geom_point() +
+  theme_bw() +
+  annotate(geom="text",x=-5,y=0.75, label=sprintf("R=%5.2f",cor(ratio, tcc$RSI)))
+
+  
+```
+
+# CCLE
+```{r}
+ABL1<-translation %>% filter(`Gene Symbol`=="ABL1") %>% pull("HG-U133 Plus 2.0 Probeset")
+IRF1<-translation %>% filter(`Gene Symbol`=="IRF1") %>% pull("HG-U133 Plus 2.0 Probeset")
+
+ratio<-exprs(ccle)[ABL1,]-exprs(ccle)[IRF1,]
+
+ggplot(data.frame(ratio=ratio, rsi=ccle$RSI, tissue=ccle$`Site Primary`), aes(x=ratio, y=rsi, col=tissue)) +
+  geom_point() +
+  theme_bw() +
+  annotate(geom="text",x=-5,y=0.75, label=sprintf("R=%5.2f",cor(ratio, ccle$RSI)))
+
+  
+```
+
+# expo
+```{r}
+ABL1<-translation %>% filter(`Gene Symbol`=="ABL1") %>% pull("HG-U133 Plus 2.0 Probeset")
+IRF1<-translation %>% filter(`Gene Symbol`=="IRF1") %>% pull("HG-U133 Plus 2.0 Probeset")
+
+ratio<-exprs(expo)[ABL1,]-exprs(expo)[IRF1,]
+
+ggplot(data.frame(ratio=ratio, rsi=expo$rsi, tissue=expo$source_name_ch1), aes(x=ratio, y=rsi)) +
+  geom_point() +
+  theme_bw() +
+  annotate(geom="text",x=-5,y=0.75, label=sprintf("R=%5.2f",cor(ratio, expo$rsi)))
+
+  
+```
+
+
+```{r session.info.table,results='asis',echo=FALSE}
+CosmosReportTemplates::print_session_information()
+```
